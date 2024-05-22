@@ -14,10 +14,15 @@
 #include <functional>  // for the function template used in the schedule signature
 #include <thread>      // for thread
 #include <vector>      // for vector
+#include <condition_variable>  // for condition_variable
+#include <mutex>          // for mutex
+#include <queue>         // for queue
+#include <algorithm>    // for std::all_of
+#include "Semaphore.h"
 
 class ThreadPool {
- public:
 
+ public:
 /**
  * Constructs a ThreadPool configured to spawn up to the specified
  * number of threads.
@@ -46,8 +51,26 @@ class ThreadPool {
   ~ThreadPool();
   
  private:
-  std::thread dt;                // dispatcher thread handle
-  std::vector<std::thread> wts;  // worker thread handles
+
+  void dispatcher();              // Dispatcher function
+  void worker(size_t workerID);   // Worker function
+
+  std::thread dt;                // Dispatcher thread handle
+  std::vector<std::thread> wts;  // Dorker thread handles
+
+  struct WorkerData {
+    std::mutex mutex;
+    std::condition_variable stop;
+    bool working = false;     
+  };
+
+  std::queue<std::function<void(void)>> tasks; // Task queue
+  std::mutex queueMutex;         // Mutex for task queue
+  Semaphore schedulingSemaphore; // Semaphore to manage task scheduling
+  condition_variable threadpoolInactive; // Condition variable to wait for all tasks to complete
+  Semaphore workerSemaphore;     // Semaphore to manage worker availability
+  std::vector<WorkerData> workers; // Vector to keep track of worker states
+  bool done;                     // Flag to indicate shutdown
 
 /**
  * ThreadPools are the type of thing that shouldn't be cloneable, since it's
