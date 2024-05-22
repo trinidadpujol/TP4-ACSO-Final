@@ -87,33 +87,29 @@ void ThreadPool::dispatcher() {
 void ThreadPool::worker(size_t workerID) {
 
     while (true) {
-        std::unique_lock<std::mutex> lock(workers[workerID].mutex);
-        // Sleep until the dispatcher signals it to wake up or the task is done
-        workers[workerID].stop.wait(lock, [this, workerID]{ return done || workers[workerID].working; });
+        std::function<void(void)> task;
 
-        if (done && !workers[workerID].working) {   // Exit the loop if done and the worker is not working
-            break;
+        {
+            std::unique_lock<std::mutex> lock(workers[workerID].mutex);
+            workers[workerID].stop.wait(lock, [this, workerID]{ return workers[workerID].task || done; }); // Sleep until a task is assigned or done is true
+            
+            if (done && !workers[workerID].task) break;  // Exit if done and no task assigned
+
+            task = move(workers[workerID].task);
+            workers[workerID].task = nullptr;    // Reset the task
         }
 
-        if (workers[workerID].working) {       
-            std::function<void(void)> task;       
-            {
-                std::lock_guard<std::mutex> lock(queueMutex);     
-                if (!tasks.empty()) {
-                    task = tasks.front();
-                    tasks.pop();
-                }
-            }
+        task();  // Execute the task
 
-            if (task) {     
-                task();
-                {
-                    std::lock_guard<std::mutex> lock(workers[workerID].mutex);
-                    workers[workerID].working = false;    // Set the worker to not working
-                }
-                workerSemaphore.signal();       // Signal the dispatcher that the worker is available         
-                threadpoolInactive.notify_all();   // Notify the dispatcher that the task is done
-            }
+        {
+            std::lock_guard<std::mutex> lock(workers[workerID].mutex);    
+            workers[workerID].working = false;        // Set the worker to not working
+        }
+        workerSemaphore.signal();  // Signal that worker is available
+        {
+            unique_lock<mutex> lock(queueMutex);       
+            if (tasks.empty() && std::all_of(workers.begin(), workers.end(), [](WorkerData& wd){ return !wd.working; })) 
+                threadpoolInactive.notify_all(); // notify all threads that the thread pool is inactive
         }
     }
 }

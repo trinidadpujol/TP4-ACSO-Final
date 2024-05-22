@@ -56,7 +56,7 @@ class ThreadPool {
   void worker(size_t workerID);   // Worker function
 
   std::thread dt;                // Dispatcher thread handle
-  std::vector<std::thread> wts;  // Dorker thread handles
+  std::vector<std::thread> wts;  // Worker thread handles
 
   struct WorkerData {
     std::mutex mutex;
