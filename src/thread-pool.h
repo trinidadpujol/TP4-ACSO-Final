@@ -61,7 +61,8 @@ class ThreadPool {
   struct WorkerData {
     std::mutex mutex;
     std::condition_variable stop;
-    bool working = false;     
+    bool working = false; 
+    std::function<void(void)> task;    
   };
 
   std::queue<std::function<void(void)>> tasks; // Task queue
